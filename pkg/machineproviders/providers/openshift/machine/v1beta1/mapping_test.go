@@ -31,7 +31,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 	var namespaceName string
 
 	cpmsBuilder := resourcebuilder.ControlPlaneMachineSet().WithReplicas(3)
-	machineBuilder := resourcebuilder.Machine().AsMaster()
+	machineBuilder := resourcebuilder.Machine().AsMaster().WithLabel(machinev1beta1.MachineClusterIDLabel, "cpms-cluster-test-id")
 
 	usEast1aProviderSpecBuilder := resourcebuilder.AWSProviderSpec().
 		WithAvailabilityZone("us-east-1a").
@@ -79,7 +79,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"subnet-us-east-1a"},
+					Values: []string{"aws-subnet-12345678"},
 				},
 			},
 		})
@@ -91,7 +91,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"subnet-us-east-1b"},
+					Values: []string{"aws-subnet-12345678"},
 				},
 			},
 		})
@@ -103,7 +103,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"subnet-us-east-1c"},
+					Values: []string{"aws-subnet-12345678"},
 				},
 			},
 		})
@@ -137,7 +137,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 
 			logger := test.NewTestLogger()
 
-			cpms := cpmsBuilder.Build()
+			cpms := in.cpmsBuilder.Build()
 			// Make sure all resources use the right namespace.
 			cpms.SetNamespace(namespaceName)
 
@@ -159,7 +159,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Expect(logger.Entries()).To(ConsistOf(in.expectedLogs))
 			Expect(cpms).To(Equal(originalCPMS), "The update functions should not modify the ControlPlaneMachineSet in any way")
 		},
-			PEntry("with no failure domains defined, returns an empty mapping", mappingMachineIndexesTableInput{
+			Entry("with no failure domains defined, returns an empty mapping", mappingMachineIndexesTableInput{
 				cpmsBuilder:    cpmsBuilder,
 				failureDomains: machinev1.FailureDomains{},
 				machines: []*machinev1beta1.Machine{
@@ -168,7 +168,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					machineBuilder.WithName("machine-2").WithProviderSpecBuilder(usEast1cProviderSpecBuilder).Build(),
 				},
 				expectedError:   errNoFailureDomains,
-				expectedMapping: map[int32]failuredomain.FailureDomain{},
+				expectedMapping: nil,
 				expectedLogs: []test.LogEntry{
 					{
 						Level:   4,
@@ -176,7 +176,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching three machines in order (a,b,c)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching three machines in order (a,b,c)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -207,7 +207,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching three machines in a order (b,c,a)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching three machines in a order (b,c,a)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -238,7 +238,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching three machines in a order (b,a,c)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching three machines in a order (b,a,c)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -269,7 +269,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching five machines in order (a,b,c,a,b)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching five machines in order (a,b,c,a,b)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -306,7 +306,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching five machines in order (b,c,a,c,b)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching five machines in order (b,c,a,c,b)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -343,7 +343,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with three failure domains matching five machines in order (b,a,c,c,a)", mappingMachineIndexesTableInput{
+			Entry("with three failure domains matching five machines in order (b,a,c,c,a)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -380,7 +380,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with a machine in an unrecognised failure domain (failure domains ordered a,b)", mappingMachineIndexesTableInput{
+			Entry("with a machine in an unrecognised failure domain (failure domains ordered a,b)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -400,6 +400,14 @@ var _ = Describe("Failure Domain Mapping", func() {
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
+							"index", 2,
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+						},
+						Message: "Ignoring unknown failure domain",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
 							"mapping", map[int32]failuredomain.FailureDomain{
 								0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 								1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -410,7 +418,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with a machine in an unrecognised failure domain (failure domains ordered b,a)", mappingMachineIndexesTableInput{
+			Entry("with a machine in an unrecognised failure domain (failure domains ordered b,a)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
@@ -430,6 +438,14 @@ var _ = Describe("Failure Domain Mapping", func() {
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
+							"index", 2,
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+						},
+						Message: "Ignoring unknown failure domain",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
 							"mapping", map[int32]failuredomain.FailureDomain{
 								0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 								1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -440,7 +456,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with multiple machines in unrecognised failure domains ", mappingMachineIndexesTableInput{
+			Entry("with multiple machines in unrecognised failure domains ", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -459,6 +475,22 @@ var _ = Describe("Failure Domain Mapping", func() {
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
+							"index", 1,
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+						},
+						Message: "Ignoring unknown failure domain",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
+							"index", 2,
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+						},
+						Message: "Ignoring unknown failure domain",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
 							"mapping", map[int32]failuredomain.FailureDomain{
 								0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 								1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
@@ -469,7 +501,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with multiple machines in the same failure domain", mappingMachineIndexesTableInput{
+			Entry("with multiple machines in the same failure domain", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -490,6 +522,15 @@ var _ = Describe("Failure Domain Mapping", func() {
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
+							"index", 1,
+							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+						},
+						Message: "Failure domain changed for index",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
 							"mapping", map[int32]failuredomain.FailureDomain{
 								0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 								1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
@@ -500,7 +541,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with a machine name does not indicate its index (a,b,c)", mappingMachineIndexesTableInput{
+			Entry("with a machine name does not indicate its index (a,b,c)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -521,6 +562,13 @@ var _ = Describe("Failure Domain Mapping", func() {
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
+							"machine", "machine-a",
+						},
+						Message: "Ignoring machine in failure domain mapping with unexpected name",
+					},
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
 							"mapping", map[int32]failuredomain.FailureDomain{
 								0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 								1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -531,7 +579,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with a machine name does not indicate its index (b,c,a)", mappingMachineIndexesTableInput{
+			Entry("with a machine name does not indicate its index (b,c,a)", mappingMachineIndexesTableInput{
 				cpmsBuilder: cpmsBuilder,
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -549,6 +597,13 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 				},
 				expectedLogs: []test.LogEntry{
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
+							"machine", "machine-a",
+						},
+						Message: "Ignoring machine in failure domain mapping with unexpected name",
+					},
 					{
 						Level: 4,
 						KeysAndValues: []interface{}{
@@ -577,7 +632,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			failureDomains, err := failuredomain.NewFailureDomains(in.failureDomains)
 			Expect(err).ToNot(HaveOccurred())
 
-			cpms := cpmsBuilder.Build()
+			cpms := in.cpmsBuilder.Build()
 			mapping, err := createBaseFailureDomainMapping(cpms, failureDomains)
 			if in.expectedError != nil {
 				Expect(err).To(MatchError(in.expectedError))
@@ -587,7 +642,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 
 			Expect(mapping).To(Equal(in.expectedMapping))
 		},
-			PEntry("with no replicas set", createBaseMappingTableInput{
+			Entry("with no replicas set", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(0),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -596,7 +651,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				).BuildFailureDomains(),
 				expectedError: errReplicasRequired,
 			}),
-			PEntry("with three replicas and three failure domains (order a,b,c)", createBaseMappingTableInput{
+			Entry("with three replicas and three failure domains (order a,b,c)", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -609,7 +664,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with three replicas and three failure domains (order b,c,a)", createBaseMappingTableInput{
+			Entry("with three replicas and three failure domains (order b,c,a)", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
@@ -622,7 +677,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with three replicas and three failure domains (order b,a,c)", createBaseMappingTableInput{
+			Entry("with three replicas and three failure domains (order b,a,c)", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
@@ -635,7 +690,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with three replicas and one failure domains", createBaseMappingTableInput{
+			Entry("with three replicas and one failure domains", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -646,7 +701,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with three replicas and two failure domains (order a,b)", createBaseMappingTableInput{
+			Entry("with three replicas and two failure domains (order a,b)", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
@@ -658,7 +713,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with three replicas and two failure domains (order b,a)", createBaseMappingTableInput{
+			Entry("with three replicas and two failure domains (order b,a)", createBaseMappingTableInput{
 				cpmsBuilder: cpmsBuilder.WithReplicas(3),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
@@ -670,8 +725,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with five replicas and three failure domains (order a,b,c)", createBaseMappingTableInput{
-				cpmsBuilder: cpmsBuilder.WithReplicas(3),
+			Entry("with five replicas and three failure domains (order a,b,c)", createBaseMappingTableInput{
+				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
 					usEast1bFailureDomainBuilder,
@@ -685,8 +740,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with five replicas and three failure domains (order b,c,a)", createBaseMappingTableInput{
-				cpmsBuilder: cpmsBuilder.WithReplicas(3),
+			Entry("with five replicas and three failure domains (order b,c,a)", createBaseMappingTableInput{
+				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
 					usEast1cFailureDomainBuilder,
@@ -700,8 +755,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with five replicas and two failure domains (order a,b)", createBaseMappingTableInput{
-				cpmsBuilder: cpmsBuilder.WithReplicas(3),
+			Entry("with five replicas and two failure domains (order a,b)", createBaseMappingTableInput{
+				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1aFailureDomainBuilder,
 					usEast1bFailureDomainBuilder,
@@ -714,8 +769,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 					4: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 				},
 			}),
-			PEntry("with five replicas and two failure domains (order b,a)", createBaseMappingTableInput{
-				cpmsBuilder: cpmsBuilder.WithReplicas(3),
+			Entry("with five replicas and two failure domains (order b,a)", createBaseMappingTableInput{
+				cpmsBuilder: cpmsBuilder.WithReplicas(5),
 				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
 					usEast1bFailureDomainBuilder,
 					usEast1aFailureDomainBuilder,
@@ -765,7 +820,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Expect(logger.Entries()).To(ConsistOf(in.expectedLogs))
 			Expect(cpms).To(Equal(originalCPMS), "The update functions should not modify the ControlPlaneMachineSet in any way")
 		},
-			PEntry("with machines in three failure domains (order a,b,c)", machineMappingTableInput{
+			Entry("with machines in three failure domains (order a,b,c)", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
@@ -779,7 +834,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("with machines in three failure domains (order b,c,a)", machineMappingTableInput{
+			Entry("with machines in three failure domains (order b,c,a)", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1bProviderSpecBuilder).Build(),
@@ -793,7 +848,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("with machines in not matched by the selector, they are ignored", machineMappingTableInput{
+			Entry("with machines in not matched by the selector, they are ignored", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1bProviderSpecBuilder).Build(),
@@ -805,7 +860,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("with machines with non-index names", machineMappingTableInput{
+			Entry("with machines with non-index names", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-a").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
@@ -832,7 +887,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-			PEntry("with multiple machines in a failure domains", machineMappingTableInput{
+			Entry("with multiple machines in a failure domains", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
@@ -846,7 +901,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("with multiple machines in the same index in the same failure domain", machineMappingTableInput{
+			Entry("with multiple machines in the same index in the same failure domain", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
@@ -859,7 +914,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("with multiple machines in the same index in different failure domains", machineMappingTableInput{
+			Entry("with multiple machines in the same index in different failure domains", machineMappingTableInput{
 				cpmsBuilder: cpmsBuilder,
 				machines: []*machinev1beta1.Machine{
 					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
@@ -875,9 +930,9 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"oldMachine", "machine-0",
-							"oldFaliureDomain", "us-east-1a",
+							"oldFaliureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
 							"newerMachine", "machine-replacement-0",
-							"newerFailureDomain", "us-east-1b",
+							"newerFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
 						},
 						Message: "Conflicting failure domains found for the same index, relying on the newer machine",
 					},
@@ -897,12 +952,12 @@ var _ = Describe("Failure Domain Mapping", func() {
 		DescribeTable("should keep the machine indexes stable where possible", func(in reconcileMappingsTableInput) {
 			logger := test.NewTestLogger()
 
-			mapping := reconcileMappings(logger.Logger(), in.baseMapping, in.expectedMapping)
+			mapping := reconcileMappings(logger.Logger(), 3, in.baseMapping, in.machineMapping)
 
 			Expect(mapping).To(Equal(in.expectedMapping))
 			Expect(logger.Entries()).To(Equal(in.expectedLogs))
 		},
-			PEntry("when the mappings match", reconcileMappingsTableInput{
+			Entry("when the mappings match", reconcileMappingsTableInput{
 				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -920,7 +975,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("when the mappings differ, machines take precedence (order b,c,a)", reconcileMappingsTableInput{
+			Entry("when the mappings differ, machines take precedence (order b,c,a)", reconcileMappingsTableInput{
 				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -938,7 +993,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("when the mappings differ, machines take precedence (order b,a,c)", reconcileMappingsTableInput{
+			Entry("when the mappings differ, machines take precedence (order b,a,c)", reconcileMappingsTableInput{
 				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -956,7 +1011,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
-			PEntry("when a machine has a failure domain not in the base mapping", reconcileMappingsTableInput{
+			Entry("when a machine has a failure domain not in the base mapping", reconcileMappingsTableInput{
 				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -977,13 +1032,13 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"failureDomain", "us-east-1c",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
 				},
 			}),
-			PEntry("when the base mapping has a failure domain not in the machine mapping", reconcileMappingsTableInput{
+			Entry("when the base mapping has a failure domain not in the machine mapping", reconcileMappingsTableInput{
 				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
@@ -1004,8 +1059,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"oldFailureDomain", "us-east-1a",
-							"newFailureDomain", "us-east-1c",
+							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
 						},
 						Message: "Failure domain changed for index",
 					},
