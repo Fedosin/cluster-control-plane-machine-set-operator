@@ -617,6 +617,33 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
+			Entry("with machines in not matched by the selector, they are ignored", mappingMachineIndexesTableInput{
+				cpmsBuilder: cpmsBuilder,
+				failureDomains: resourcebuilder.AWSFailureDomains().WithFailureDomainBuilders(
+					usEast1aFailureDomainBuilder,
+					usEast1bFailureDomainBuilder,
+					usEast1cFailureDomainBuilder,
+				).BuildFailureDomains(),
+				machines: []*machinev1beta1.Machine{
+					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1bProviderSpecBuilder).Build(),
+					resourcebuilder.Machine().WithName("machine-1").WithProviderSpecBuilder(usEast1cProviderSpecBuilder).Build(),
+					resourcebuilder.Machine().WithName("machine-2").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
+				},
+				expectedMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				},
+				expectedLogs: []test.LogEntry{
+					{
+						Level: 4,
+						KeysAndValues: []interface{}{
+							"mapping", map[int32]failuredomain.FailureDomain{
+								0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+							},
+						},
+						Message: "Mapped provided failure domains",
+					},
+				},
+			}),
 		)
 	})
 
@@ -802,14 +829,17 @@ var _ = Describe("Failure Domain Mapping", func() {
 			// Make sure all resources use the right namespace.
 			cpms.SetNamespace(namespaceName)
 
+			machines := []machinev1beta1.Machine{}
+
 			for _, machine := range in.machines {
 				machine.SetNamespace(namespaceName)
 				Expect(k8sClient.Create(ctx, machine)).To(Succeed())
+				machines = append(machines, *machine)
 			}
 
 			originalCPMS := cpms.DeepCopy()
 
-			mapping, err := createMachineMapping(ctx, logger.Logger(), k8sClient, cpms)
+			mapping, err := createMachineMapping(logger.Logger(), machines)
 			if in.expectedError != nil {
 				Expect(err).To(MatchError(in.expectedError))
 			} else {
@@ -845,18 +875,6 @@ var _ = Describe("Failure Domain Mapping", func() {
 					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-				},
-				expectedLogs: []test.LogEntry{},
-			}),
-			Entry("with machines in not matched by the selector, they are ignored", machineMappingTableInput{
-				cpmsBuilder: cpmsBuilder,
-				machines: []*machinev1beta1.Machine{
-					machineBuilder.WithName("machine-0").WithProviderSpecBuilder(usEast1bProviderSpecBuilder).Build(),
-					resourcebuilder.Machine().WithName("machine-1").WithProviderSpecBuilder(usEast1cProviderSpecBuilder).Build(),
-					resourcebuilder.Machine().WithName("machine-2").WithProviderSpecBuilder(usEast1aProviderSpecBuilder).Build(),
-				},
-				expectedMapping: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 				},
 				expectedLogs: []test.LogEntry{},
 			}),

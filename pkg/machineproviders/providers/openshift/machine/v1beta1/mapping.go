@@ -56,17 +56,27 @@ func mapMachineIndexesToFailureDomains(ctx context.Context, logger logr.Logger, 
 		return nil, errNoFailureDomains
 	}
 
+	selector, err := metav1.LabelSelectorAsSelector(&cpms.Spec.Selector)
+	if err != nil {
+		return nil, fmt.Errorf("could not convert label selector to selector: %w", err)
+	}
+
+	machineList := &machinev1beta1.MachineList{}
+	if err := cl.List(ctx, machineList, &client.ListOptions{LabelSelector: selector}); err != nil {
+		return nil, fmt.Errorf("failed to list machines: %w", err)
+	}
+
 	baseMapping, err := createBaseFailureDomainMapping(cpms, failureDomains)
 	if err != nil {
 		return nil, fmt.Errorf("could not construct base failure domain mapping: %w", err)
 	}
 
-	machineMapping, err := createMachineMapping(ctx, logger, cl, cpms)
+	machineMapping, err := createMachineMapping(logger, machineList.Items)
 	if err != nil {
 		return nil, fmt.Errorf("could not construct machine mapping: %w", err)
 	}
 
-	out := reconcileMappings(logger, *cpms.Spec.Replicas, baseMapping, machineMapping)
+	out := reconcileMappings(logger, int32(len(machineList.Items)), baseMapping, machineMapping)
 
 	logger.V(4).Info(
 		"Mapped provided failure domains",
@@ -104,24 +114,14 @@ func createBaseFailureDomainMapping(cpms *machinev1.ControlPlaneMachineSet, fail
 // createMachineMapping inspects the state of the Machines on the cluster, selected by the ControlPlaneMachineSet, and
 // creates a mapping of their indexes (if available) to their failure domain to allow the mapping to be customised
 // to the state of the cluster.
-func createMachineMapping(ctx context.Context, logger logr.Logger, cl client.Client, cpms *machinev1.ControlPlaneMachineSet) (map[int32]failuredomain.FailureDomain, error) {
+func createMachineMapping(logger logr.Logger, machineList []machinev1beta1.Machine) (map[int32]failuredomain.FailureDomain, error) {
 	out := make(map[int32]failuredomain.FailureDomain)
 
 	// indexToMachine contains a mapping between the machine domain index in the newest machine
 	// for this particular index.
 	indexToMachine := make(map[int32]machinev1beta1.Machine)
 
-	selector, err := metav1.LabelSelectorAsSelector(&cpms.Spec.Selector)
-	if err != nil {
-		return nil, fmt.Errorf("could not convert label selector to selector: %w", err)
-	}
-
-	machineList := &machinev1beta1.MachineList{}
-	if err := cl.List(ctx, machineList, &client.ListOptions{LabelSelector: selector}); err != nil {
-		return nil, fmt.Errorf("failed to list machines: %w", err)
-	}
-
-	for _, machine := range machineList.Items {
+	for _, machine := range machineList {
 		failureDomain, err := providerconfig.ExtractFailureDomainFromMachine(machine)
 		if err != nil {
 			return nil, fmt.Errorf("could not extract failure domain from machine %s: %w", machine.Name, err)
