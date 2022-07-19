@@ -862,17 +862,14 @@ var _ = Describe("Failure Domain Mapping", func() {
 			// Make sure all resources use the right namespace.
 			cpms.SetNamespace(namespaceName)
 
-			machines := []machinev1beta1.Machine{}
-
 			for _, machine := range in.machines {
 				machine.SetNamespace(namespaceName)
 				Expect(k8sClient.Create(ctx, machine)).To(Succeed())
-				machines = append(machines, *machine)
 			}
 
 			originalCPMS := cpms.DeepCopy()
 
-			mapping, err := createMachineMapping(logger.Logger(), machines)
+			mapping, err := createMachineMapping(ctx, logger.Logger(), k8sClient, cpms)
 			if in.expectedError != nil {
 				Expect(err).To(MatchError(in.expectedError))
 			} else {
@@ -1003,7 +1000,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 		DescribeTable("should keep the machine indexes stable where possible", func(in reconcileMappingsTableInput) {
 			logger := test.NewTestLogger()
 
-			mapping := reconcileMappings(logger.Logger(), 3, in.baseMapping, in.machineMapping)
+			mapping := reconcileMappings(logger.Logger(), in.baseMapping, in.machineMapping)
 
 			Expect(mapping).To(Equal(in.expectedMapping))
 			Expect(logger.Entries()).To(Equal(in.expectedLogs))
@@ -1023,6 +1020,30 @@ var _ = Describe("Failure Domain Mapping", func() {
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+				},
+				expectedLogs: []test.LogEntry{},
+			}),
+			Entry("when the mappings match but some failure domains are duplicated", reconcileMappingsTableInput{
+				baseMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				},
+				machineMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				},
+				expectedMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
@@ -1059,6 +1080,30 @@ var _ = Describe("Failure Domain Mapping", func() {
 					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+				},
+				expectedLogs: []test.LogEntry{},
+			}),
+			Entry("when the mappings differ, and failure domains are duplicated, machines take precedence (order b,a,a,c,b)", reconcileMappingsTableInput{
+				baseMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				},
+				machineMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				},
+				expectedMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+					1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
+					3: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
+					4: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 				},
 				expectedLogs: []test.LogEntry{},
 			}),
@@ -1117,125 +1162,22 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			}),
-		)
-	})
-
-	Context("getFirstUnusedFailureDomain", func() {
-		type getFirstUnusedFailureDomainTableInput struct {
-			used                        map[int32]failuredomain.FailureDomain
-			candidates                  map[int32]failuredomain.FailureDomain
-			expectedNotFound            bool
-			expectedFailureDomainNumber int
-		}
-
-		DescribeTable("should get first unused domain from the list", func(in getFirstUnusedFailureDomainTableInput) {
-			fd := getFirstUnusedFailureDomain(in.used, in.candidates)
-
-			if in.expectedNotFound {
-				Expect(fd).To(BeNil())
-			} else {
-				Expect(*fd).To(Equal(in.candidates[int32(in.expectedFailureDomainNumber)]))
-			}
-		},
-			Entry("empty used and candidates", getFirstUnusedFailureDomainTableInput{
-				used:             map[int32]failuredomain.FailureDomain{},
-				candidates:       map[int32]failuredomain.FailureDomain{},
-				expectedNotFound: true,
-			}),
-			Entry("empty candidates and 3 used domains", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
+			Entry("when a failure domain isn't represented in the machine mapping", reconcileMappingsTableInput{
+				baseMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
-				candidates:       map[int32]failuredomain.FailureDomain{},
-				expectedNotFound: true,
-			}),
-			Entry("all candidates are used", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
+				machineMapping: map[int32]failuredomain.FailureDomain{
+					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				expectedNotFound: true,
-			}),
-			Entry("empty used and 3 candidates ordered (a,b,c)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 0,
-			}),
-			Entry("empty used and 3 candidates ordered (b,a,c)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{},
-				candidates: map[int32]failuredomain.FailureDomain{
+				expectedMapping: map[int32]failuredomain.FailureDomain{
 					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
 					1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
 					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
 				},
-				expectedFailureDomainNumber: 1,
-			}),
-			Entry("empty used and 3 candidates ordered (c,b,a)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 2,
-			}),
-			Entry("used a and 3 candidates ordered (a,b,c)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-				},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 1,
-			}),
-			Entry("used a and 3 candidates ordered (b,a,c)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-				},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 0,
-			}),
-			Entry("used a and b, and 3 candidates ordered (a,b,c)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-				},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 2,
-			}),
-			Entry("used a and c, and 3 candidates ordered (a,c,b)", getFirstUnusedFailureDomainTableInput{
-				used: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-				},
-				candidates: map[int32]failuredomain.FailureDomain{
-					0: failuredomain.NewAWSFailureDomain(usEast1aFailureDomainBuilder.Build()),
-					1: failuredomain.NewAWSFailureDomain(usEast1cFailureDomainBuilder.Build()),
-					2: failuredomain.NewAWSFailureDomain(usEast1bFailureDomainBuilder.Build()),
-				},
-				expectedFailureDomainNumber: 2,
+				expectedLogs: []test.LogEntry{},
 			}),
 		)
 	})
