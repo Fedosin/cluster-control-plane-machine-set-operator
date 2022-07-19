@@ -33,6 +33,39 @@ var _ = Describe("Failure Domain Mapping", func() {
 	cpmsBuilder := resourcebuilder.ControlPlaneMachineSet().WithReplicas(3)
 	machineBuilder := resourcebuilder.Machine().AsMaster().WithLabel(machinev1beta1.MachineClusterIDLabel, "cpms-cluster-test-id")
 
+	usEast1aSubnet := machinev1beta1.AWSResourceReference{
+		Filters: []machinev1beta1.Filter{
+			{
+				Name: "tag:Name",
+				Values: []string{
+					"subnet-us-east-1a",
+				},
+			},
+		},
+	}
+
+	usEast1bSubnet := machinev1beta1.AWSResourceReference{
+		Filters: []machinev1beta1.Filter{
+			{
+				Name: "tag:Name",
+				Values: []string{
+					"subnet-us-east-1b",
+				},
+			},
+		},
+	}
+
+	usEast1cSubnet := machinev1beta1.AWSResourceReference{
+		Filters: []machinev1beta1.Filter{
+			{
+				Name: "tag:Name",
+				Values: []string{
+					"subnet-us-east-1c",
+				},
+			},
+		},
+	}
+
 	usEast1aProviderSpecBuilder := resourcebuilder.AWSProviderSpec().
 		WithAvailabilityZone("us-east-1a").
 		WithSecurityGroups([]machinev1beta1.AWSResourceReference{
@@ -44,7 +77,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			},
-		})
+		}).WithSubnet(usEast1aSubnet)
 
 	usEast1bProviderSpecBuilder := resourcebuilder.AWSProviderSpec().
 		WithAvailabilityZone("us-east-1b").
@@ -57,7 +90,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			},
-		})
+		}).WithSubnet(usEast1bSubnet)
 
 	usEast1cProviderSpecBuilder := resourcebuilder.AWSProviderSpec().
 		WithAvailabilityZone("us-east-1c").
@@ -70,7 +103,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 					},
 				},
 			},
-		})
+		}).WithSubnet(usEast1cSubnet)
 
 	usEast1aFailureDomainBuilder := resourcebuilder.AWSFailureDomain().
 		WithAvailabilityZone("us-east-1a").
@@ -79,7 +112,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"aws-subnet-12345678"},
+					Values: []string{"subnet-us-east-1a"},
 				},
 			},
 		})
@@ -91,7 +124,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"aws-subnet-12345678"},
+					Values: []string{"subnet-us-east-1b"},
 				},
 			},
 		})
@@ -103,7 +136,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 			Filters: &[]machinev1.AWSResourceFilter{
 				{
 					Name:   "tag:Name",
-					Values: []string{"aws-subnet-12345678"},
+					Values: []string{"subnet-us-east-1c"},
 				},
 			},
 		})
@@ -401,7 +434,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1c]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
@@ -439,7 +472,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1c]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
@@ -476,7 +509,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 1,
-							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1b]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
@@ -484,7 +517,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1c]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
@@ -523,8 +556,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 1,
-							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
-							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1b]}]}}",
+							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1a]}]}}",
 						},
 						Message: "Failure domain changed for index",
 					},
@@ -948,9 +981,9 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"oldMachine", "machine-0",
-							"oldFaliureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"oldFaliureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1a]}]}}",
 							"newerMachine", "machine-replacement-0",
-							"newerFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"newerFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1b, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1b]}]}}",
 						},
 						Message: "Conflicting failure domains found for the same index, relying on the newer machine",
 					},
@@ -1050,7 +1083,7 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"failureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1c]}]}}",
 						},
 						Message: "Ignoring unknown failure domain",
 					},
@@ -1077,8 +1110,8 @@ var _ = Describe("Failure Domain Mapping", func() {
 						Level: 4,
 						KeysAndValues: []interface{}{
 							"index", 2,
-							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
-							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[aws-subnet-12345678]}]}}",
+							"oldFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1a, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1a]}]}}",
+							"newFailureDomain", "AWSFailureDomain{AvailabilityZone:us-east-1c, Subnet:{Type:Filters, Value:&[{Name:tag:Name Values:[subnet-us-east-1c]}]}}",
 						},
 						Message: "Failure domain changed for index",
 					},
