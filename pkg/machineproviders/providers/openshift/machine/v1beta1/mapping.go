@@ -127,8 +127,8 @@ func createMachineMapping(logger logr.Logger, machineList []machinev1beta1.Machi
 			return nil, fmt.Errorf("could not extract failure domain from machine %s: %w", machine.Name, err)
 		}
 
-		machineNameIndex, err := strconv.ParseInt(machine.Name[strings.LastIndex(machine.Name, "-")+1:], 10, 32)
-		if err != nil {
+		machineNameIndex, ok := parseMachineNameIndex(machine.Name)
+		if !ok {
 			// Ignore the machine as it doesn't contain an index in its name.
 			logger.V(4).Info(
 				"Ignoring machine in failure domain mapping with unexpected name",
@@ -258,4 +258,19 @@ func getFirstUnusedFailureDomain(used, candidatesMap map[int32]failuredomain.Fai
 	}
 
 	return nil
+}
+
+// parseMachineNameIndex returns an integer suffix from the machine name. If there is no sufficient suffix, it
+// returns "false" as a second value.
+// Example:
+//   machine-master-3 -> 3, true
+//   machine-master-a -> 0, false
+//   machine-master3  -> 0 , false
+func parseMachineNameIndex(machineName string) (int, bool) {
+	machineNameIndex, err := strconv.ParseInt(machineName[strings.LastIndex(machineName, "-")+1:], 10, 32)
+	if err != nil {
+		return 0, false
+	}
+
+	return int(machineNameIndex), true
 }
